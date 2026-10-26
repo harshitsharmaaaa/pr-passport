@@ -1,4 +1,5 @@
 import { AnalysisError } from "../errors";
+import { MAX_PATCH_CHARS, MAX_PATCH_FILES } from "../limits";
 import type {
   ChangedFile,
   CiCheck,
@@ -51,13 +52,14 @@ interface GithubPullRequest {
   html_url?: string;
 }
 
-interface GithubFile {
+export interface GithubFile {
   filename?: string;
   previous_filename?: string;
   status?: string;
   additions?: number;
   deletions?: number;
   changes?: number;
+  patch?: string;
 }
 
 interface GithubCommit {
@@ -278,16 +280,17 @@ export class LiveGithubSource implements PullRequestSource {
       MAX_FILE_PAGES,
     );
 
+    // Patches are capped: only the first few files that expose one are kept.
+    const patchAllowed = new Set(
+      raw
+        .filter((file) => typeof file.patch === "string" && file.patch.trim().length > 0)
+        .slice(0, MAX_PATCH_FILES)
+        .map((file) => file.filename ?? ""),
+    );
+
     return raw
-      .filter((file) => typeof file.filename === "string" && file.filename.length > 0)
-      .map((file) => ({
-        filename: file.filename as string,
-        previousFilename: file.previous_filename,
-        status: normaliseStatus(file.status),
-        additions: clampNumber(file.additions),
-        deletions: clampNumber(file.deletions),
-        changes: clampNumber(file.changes, clampNumber(file.additions) + clampNumber(file.deletions)),
-      }));
+      .map((file) => toChangedFile(file, patchAllowed.has(file.filename ?? "")))
+      .filter((file): file is ChangedFile => file !== null);
   }
 
   async getCommits(ref: { owner: string; repo: string; number: number }): Promise<CommitSummary[]> {
@@ -456,6 +459,34 @@ export class LiveGithubSource implements PullRequestSource {
     );
     return content ?? null;
   }
+}
+
+/** Cap a unified diff so prompts stay small; the marker makes truncation visible. */
+export function truncatePatch(patch: string): string {
+  const normalized = patch.replace(/\r\n?/g, "\n");
+  if (normalized.length <= MAX_PATCH_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_PATCH_CHARS)}\n[truncated by PR Passport]`;
+}
+
+export function toChangedFile(raw: GithubFile, allowPatch: boolean): ChangedFile | null {
+  const filename = typeof raw.filename === "string" ? raw.filename : "";
+  if (!filename) return null;
+
+  const additions = clampNumber(raw.additions);
+  const deletions = clampNumber(raw.deletions);
+  const file: ChangedFile = {
+    filename,
+    previousFilename: raw.previous_filename,
+    status: normaliseStatus(raw.status),
+    additions,
+    deletions,
+    changes: clampNumber(raw.changes, additions + deletions),
+  };
+
+  if (allowPatch && typeof raw.patch === "string" && raw.patch.trim().length > 0) {
+    file.patch = truncatePatch(raw.patch);
+  }
+  return file;
 }
 
 function normaliseStatus(status: string | undefined): ChangedFile["status"] {

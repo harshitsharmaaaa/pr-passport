@@ -174,6 +174,11 @@ export interface ChangedFile {
   deletions: number;
   changes: number;
   previousFilename?: string;
+  /**
+   * Bounded unified-diff excerpt from GitHub. Absent for binary files and
+   * capped to a small number of files so prompts stay small.
+   */
+  patch?: string;
 }
 
 export interface CommitSummary {

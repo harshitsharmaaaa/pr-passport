@@ -20,8 +20,16 @@ export function makeFile(
   additions = 12,
   deletions = 3,
   status: ChangedFile["status"] = "modified",
+  patch?: string,
 ): ChangedFile {
-  return { filename, status, additions, deletions, changes: additions + deletions };
+  return {
+    filename,
+    status,
+    additions,
+    deletions,
+    changes: additions + deletions,
+    ...(patch ? { patch } : {}),
+  };
 }
 
 export function makeCommit(

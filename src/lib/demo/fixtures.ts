@@ -93,9 +93,42 @@ function makeFile(
   additions: number,
   deletions: number,
   status: ChangedFile["status"] = "modified",
+  patch?: string,
 ): ChangedFile {
-  return { filename, status, additions, deletions, changes: additions + deletions };
+  return {
+    filename,
+    status,
+    additions,
+    deletions,
+    changes: additions + deletions,
+    ...(patch ? { patch } : {}),
+  };
 }
+
+const PAGINATION_PATCH = [
+  "@@ -0,0 +1,12 @@",
+  "+export interface Cursor {",
+  "+  readonly next: string | null;",
+  "+}",
+  "+",
+  "+export function encodeCursor(index: number): Cursor {",
+  "+  return { next: index >= 0 ? String(index) : null };",
+  "+}",
+].join("\n");
+
+const WIDGETS_PATCH = [
+  "@@ -14,7 +14,9 @@",
+  " export async function listWidgets(options: WidgetQuery) {",
+  "-  return fetchWidgets({ page: options.page });",
+  "+  return fetchWidgets({ cursor: options.cursor });",
+  " }",
+].join("\n");
+
+const DOCS_PATCH = [
+  '@@ -40,7 +40,7 @@',
+  "-fetchWidgets({ page: 2 })",
+  '+fetchWidgets({ cursor: "eyJwYWdlIjoyfQ" })',
+].join("\n");
 
 function makeCommit(sha: string, message: string, author: string, date: string): CommitSummary {
   return { sha, shortSha: sha.slice(0, 7), message, author, date, verified: false };
@@ -131,8 +164,8 @@ function repoContext(): RepoContext {
 }
 
 const FAILING_FILES: ChangedFile[] = [
-  makeFile("src/api/pagination.ts", 312, 0, "added"),
-  makeFile("src/api/widgets.ts", 210, 64),
+  makeFile("src/api/pagination.ts", 312, 0, "added", PAGINATION_PATCH),
+  makeFile("src/api/widgets.ts", 210, 64, "modified", WIDGETS_PATCH),
   makeFile("src/api/index.ts", 12, 3),
   makeFile("src/http/query.ts", 96, 18),
   makeFile("src/http/cursor.ts", 88, 0, "added"),
@@ -149,7 +182,7 @@ const FAILING_FILES: ChangedFile[] = [
 ];
 
 const CLEAN_FILES: ChangedFile[] = [
-  makeFile("docs/api/pagination.md", 18, 6),
+  makeFile("docs/api/pagination.md", 18, 6, "modified", DOCS_PATCH),
   makeFile("test/pagination.test.ts", 42, 3, "added"),
   makeFile("CHANGELOG.md", 4, 0),
 ];

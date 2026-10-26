@@ -130,7 +130,7 @@ Rate limiting is per-instance and in-memory (8 analyses/minute/IP). Put a platfo
 
 - Only public repositories; private repos return "not found".
 - Guidelines are read as Markdown; reStructuredText or wiki-only guidelines are not fetched.
-- The model never sees the diff — only metadata, file paths, commit summaries, and the PR description. Its job is policy interpretation, not code review.
+- The model sees metadata, file paths, commit summaries, the PR description, and bounded diff excerpts (up to 8 files, 1,600 characters each) - never the full diff, and patch content is delivered as untrusted data, not instructions. Its job is policy interpretation, not code review.
 - GitHub mergeability can lag; when it is not computed yet the report says so.
 - Monorepos with guidelines outside the checked paths will show "no guidelines found" — the report states this rather than guessing rules.
 

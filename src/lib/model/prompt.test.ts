@@ -73,6 +73,23 @@ describe("buildMessages", () => {
     expect((messages.user.match(/"path": "src\/file-/g) ?? []).length).toBe(60);
   });
 
+  it("includes bounded patch excerpts when present and omits them otherwise", () => {
+    const withPatch = makeFile("src/api/pagination.ts", 3, 0, "added", "@@ -0,0 +1,2 @@\n+export const x = 1;");
+    const withoutPatch = makeFile("src/api/other.ts", 2, 1);
+
+    const messages = buildMessages({
+      pr: makePr(),
+      files: [withPatch, withoutPatch],
+      commits: [],
+      ci: makeCi(),
+      rules: [RULE],
+    });
+
+    expect(messages.user).toContain('"patch": "@@ -0,0 +1,2 @@\\n+export const x = 1;"');
+    expect((messages.user.match(/"patch": /g) ?? []).length).toBe(1);
+    expect(messages.system).toContain("unified-diff excerpt");
+  });
+
   it("documents the evidence vocabulary without exposing secrets", () => {
     expect(SYSTEM_PROMPT).toContain("metadata");
     expect(SYSTEM_PROMPT).toContain("changed_files");
