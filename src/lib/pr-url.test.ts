@@ -115,4 +115,44 @@ describe("parsePullRequestUrl", () => {
     expect(tryParsePullRequestUrl("nope")).toBeNull();
     expect(tryParsePullRequestUrl("https://github.com/a/b/pull/1")?.number).toBe(1);
   });
+
+  it("rejects percent-encoded path segments", () => {
+    expect(codeFor("https://github.com/a%2Fb/c/pull/1")).toBe("invalid_url");
+    expect(codeFor("https://github.com/%2e%2e/etc/pull/1")).toBe("invalid_url");
+    expect(codeFor("https://github.com/ok/repo/pull/1%00")).toBe("invalid_url");
+  });
+
+  it("rejects control characters that URL parsers silently strip", () => {
+    expect(codeFor("https://github.com/a\n.b/pull/1")).toBe("invalid_url");
+    expect(codeFor("https://github.com/a/b/pull/1\r\nX-Injection: 1")).toBe("invalid_url");
+    expect(codeFor("https://github.com/a/b/pu\tll/1")).toBe("invalid_url");
+  });
+
+  it("rejects backslashes before any URL normalization", () => {
+    expect(codeFor("https://github.com\\a\\b\\pull\\1")).toBe("invalid_url");
+    expect(codeFor("https://github.com/a\\b/pull/1")).toBe("invalid_url");
+  });
+
+  it("canonicalises leading zeros in pull request numbers", () => {
+    const ref = parsePullRequestUrl("https://github.com/a/b/pull/007");
+    expect(ref.number).toBe(7);
+    expect(ref.canonicalUrl).toBe("https://github.com/a/b/pull/7");
+  });
+
+  it("rejects a trailing dot in the hostname", () => {
+    expect(codeFor("https://github.com./a/b/pull/1")).toBe("unsupported_host");
+  });
+
+  it("accepts an empty port component and rejects non-default ports", () => {
+    expect(parsePullRequestUrl("https://github.com:/a/b/pull/1").number).toBe(1);
+    // Port 80 is the default for http and is normalised away by the URL parser.
+    expect(parsePullRequestUrl("http://github.com:80/a/b/pull/1").number).toBe(1);
+    expect(codeFor("https://github.com:8080/a/b/pull/1")).toBe("unsupported_host");
+    expect(codeFor("http://github.com:8080/a/b/pull/1")).toBe("unsupported_host");
+  });
+
+  it("rejects numbers with signs or spaces", () => {
+    expect(codeFor("https://github.com/a/b/pull/+1")).toBe("invalid_url");
+    expect(codeFor("https://github.com/a/b/pull/ 1")).toBe("invalid_url");
+  });
 });

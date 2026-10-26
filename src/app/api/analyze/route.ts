@@ -44,8 +44,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const declaredLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+  let rawBody: string;
+  try {
+    rawBody = await request.text();
+  } catch {
+    return NextResponse.json(
+      { error: { code: "invalid_url", message: "Send a JSON body with a pull request URL." } },
+      { status: 400 },
+    );
+  }
+
+  // Enforced on the decoded body: request headers are client-supplied and
+  // cannot be trusted to reflect the real size.
+  if (Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
     return NextResponse.json(
       { error: { code: "invalid_url", message: "Request body is too large." } },
       { status: 413 },
@@ -54,7 +65,7 @@ export async function POST(request: Request) {
 
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(rawBody);
   } catch {
     return NextResponse.json(
       { error: { code: "invalid_url", message: "Send a JSON body with a pull request URL." } },
