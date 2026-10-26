@@ -1,0 +1,35 @@
+{
+  "name": "pr-passport",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Check public GitHub pull requests against the repository's own contribution guidelines.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "bun test src",
+    "test:watch": "bun test --watch src",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "verify": "bun run typecheck && bun run lint && bun run test"
+  },
+  "dependencies": {
+    "next": "15.5.4",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.1.13",
+    "@types/bun": "1.2.21",
+    "@types/node": "22.18.1",
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "eslint": "9.36.0",
+    "@next/eslint-plugin-next": "15.5.4",
+    "tailwindcss": "4.1.13",
+    "typescript": "5.9.2",
+    "typescript-eslint": "8.44.0"
+  }
+}
