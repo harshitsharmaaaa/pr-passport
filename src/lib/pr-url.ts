@@ -16,7 +16,6 @@ const ALLOWED_TRAILING_SEGMENTS = new Set([
   "commits",
   "checks",
   "conversation",
-  "commits",
   "reviews",
 ]);
 
@@ -38,6 +37,17 @@ export function parsePullRequestUrl(input: string): PullRequestRef {
   }
   if (raw.length > 512) {
     fail("invalid_url", "That URL is too long to be a pull request URL.");
+  }
+
+  // URL parsers silently strip tabs, newlines and other control characters
+  // before parsing, which can hide a different host than the user typed.
+  if (/[\u0000-\u001F\u007F]/.test(raw)) {
+    fail("invalid_url", "The URL contains control characters.");
+  }
+  // Backslashes are treated as slashes by some parsers and as literals by
+  // others; legitimate pull request URLs never contain them.
+  if (raw.includes("\\")) {
+    fail("invalid_url", "Backslashes are not valid in a pull request URL.");
   }
 
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
@@ -75,6 +85,12 @@ export function parsePullRequestUrl(input: string): PullRequestRef {
       "That URL does not point at a pull request.",
       "Expected format: https://github.com/owner/repository/pull/123",
     );
+  }
+
+  // Percent-encoding could smuggle separators or homoglyphs past the owner,
+  // repository and number patterns below; GitHub never percent-encodes them.
+  if (url.pathname.includes("%")) {
+    fail("invalid_url", "Percent-encoded characters are not supported in pull request URLs.");
   }
 
   const [owner, repo, pullSegment, numberSegment, ...rest] = segments;

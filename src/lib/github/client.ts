@@ -102,6 +102,84 @@ function clampNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+const OWNER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
+const SHA_PATTERN = /^[a-fA-F0-9]{7,40}$/;
+
+/**
+ * The client is the only place that turns a parsed reference into request
+ * paths, so it re-validates every component instead of trusting callers.
+ */
+function assertOwnerRepo(owner: string, repo: string): void {
+  if (!OWNER_PATTERN.test(owner) || !REPO_PATTERN.test(repo) || owner === "." || repo === ".") {
+    throw new AnalysisError("invalid_url", "The repository reference failed validation before any request was made.", {
+      status: 400,
+    });
+  }
+}
+
+function assertRef(ref: { owner: string; repo: string; number: number }): void {
+  assertOwnerRepo(ref.owner, ref.repo);
+  if (!Number.isInteger(ref.number) || ref.number < 1 || ref.number > 9_999_999) {
+    throw new AnalysisError("invalid_url", "The pull request number failed validation before any request was made.", {
+      status: 400,
+    });
+  }
+}
+
+function assertSha(sha: string): string {
+  if (!SHA_PATTERN.test(sha)) {
+    throw new AnalysisError(
+      "github_unavailable",
+      "The pull request head commit is missing or malformed, so CI could not be read.",
+      { status: 502 },
+    );
+  }
+  return sha;
+}
+
+/** Reject traversal and unsafe segments before a repository path is requested. */
+function assertRepositoryPath(path: string): string[] {
+  const segments = path.split("/").filter(Boolean);
+  if (
+    segments.length === 0 ||
+    segments.some((segment) => segment === "." || segment === ".." || segment.includes("\\") || segment.includes("%"))
+  ) {
+    throw new AnalysisError("invalid_url", "The repository file path failed validation before any request was made.", {
+      status: 400,
+    });
+  }
+  return segments;
+}
+
+/**
+ * Requests must stay on the official GitHub API host (or the official raw
+ * content host when raw file content is requested). Anything else is refused.
+ */
+const ALLOWED_RESPONSE_HOSTS = new Set(["api.github.com"]);
+const ALLOWED_RAW_RESPONSE_HOSTS = new Set(["api.github.com", "raw.githubusercontent.com"]);
+
+function assertFinalHost(response: Response, acceptRaw: boolean): void {
+  let finalHost = "api.github.com";
+  try {
+    finalHost = new URL(response.url || "https://api.github.com/").hostname.toLowerCase();
+  } catch {
+    // Keep the default; an unreadable final URL is treated as api.github.com.
+  }
+  const allowed = acceptRaw ? ALLOWED_RAW_RESPONSE_HOSTS : ALLOWED_RESPONSE_HOSTS;
+  if (!allowed.has(finalHost)) {
+    throw new AnalysisError(
+      "github_unavailable",
+      `GitHub redirected the request to an unexpected host (${finalHost}); the response was not used.`,
+      { status: 502 },
+    );
+  }
+}
+
 function statusError(status: number, headers: Headers): AnalysisError {
   if (status === 401) {
     return new AnalysisError("github_unavailable", "GitHub rejected the configured token.", {
@@ -113,14 +191,18 @@ function statusError(status: number, headers: Headers): AnalysisError {
     const remaining = headers.get("x-ratelimit-remaining");
     if (remaining === "0" || status === 429) {
       const reset = Number(headers.get("x-ratelimit-reset"));
+      const retryAfter = Number(headers.get("retry-after"));
       const minutes = Number.isFinite(reset) && reset > 0
         ? Math.max(1, Math.ceil((reset * 1000 - Date.now()) / 60_000))
         : null;
+      const retryHint = Number.isFinite(retryAfter) && retryAfter > 0
+        ? ` Retry after about ${retryAfter} second(s).`
+        : "";
       return new AnalysisError("rate_limited", "GitHub's API rate limit is exhausted.", {
         status: 429,
         hint: minutes
-          ? `Try again in about ${minutes} minute(s), or set GITHUB_TOKEN for a higher limit.`
-          : "Set GITHUB_TOKEN for a higher limit, then try again.",
+          ? `Try again in about ${minutes} minute(s), or set GITHUB_TOKEN for a higher limit.${retryHint}`
+          : `Set GITHUB_TOKEN for a higher limit, then try again.${retryHint}`,
       });
     }
     return new AnalysisError("github_unavailable", "GitHub denied this request (HTTP 403).", {
@@ -167,12 +249,21 @@ export class LiveGithubSource implements PullRequestSource {
         signal: AbortSignal.timeout(this.timeoutMs),
         cache: "no-store",
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new AnalysisError(
+          "github_unavailable",
+          `GitHub did not respond within ${Math.round(this.timeoutMs / 1000)} second(s).`,
+          { status: 504, hint: "GitHub may be slow or unreachable. Try again shortly." },
+        );
+      }
       throw new AnalysisError("github_unavailable", "Could not reach the GitHub API.", {
         status: 502,
         hint: "Check the server's network connection and try again.",
       });
     }
+
+    assertFinalHost(response, (options.accept ?? "").includes("raw"));
 
     if (response.status === 404 && options.allowNotFound) return null;
     if (!response.ok) throw statusError(response.status, response.headers);
@@ -190,14 +281,20 @@ export class LiveGithubSource implements PullRequestSource {
     }
   }
 
+  /**
+   * Paged listing. A 404 here is a failure, not an empty result, so callers
+   * can distinguish "nothing changed" from "the data could not be read".
+   */
   private async paginate<T>(path: string, maxPages: number): Promise<T[]> {
     const items: T[] = [];
     for (let page = 1; page <= maxPages; page += 1) {
       const separator = path.includes("?") ? "&" : "?";
-      const batch = await this.request<T[]>(`${path}${separator}per_page=100&page=${page}`, {
-        allowNotFound: true,
-      });
-      if (!batch) break;
+      const batch = await this.request<T[]>(`${path}${separator}per_page=100&page=${page}`);
+      if (!Array.isArray(batch)) {
+        throw new AnalysisError("github_unavailable", "GitHub returned an unexpected listing format.", {
+          status: 502,
+        });
+      }
       items.push(...batch);
       if (batch.length < 100) break;
     }
@@ -209,6 +306,7 @@ export class LiveGithubSource implements PullRequestSource {
     repo: string;
     number: number;
   }): Promise<PullRequestData> {
+    assertRef(ref);
     const pr = await this.request<GithubPullRequest>(
       `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/pulls/${ref.number}`,
       { allowNotFound: true },
@@ -226,47 +324,62 @@ export class LiveGithubSource implements PullRequestSource {
     }
 
     const repo = pr.base?.repo;
-    if (!repo?.full_name) {
+    if (!repo || typeof repo.full_name !== "string" || repo.full_name.length === 0) {
       throw new AnalysisError("github_unavailable", "GitHub did not return the base repository for this pull request.", {
         status: 502,
       });
     }
 
-    const state = pr.merged_at ? "merged" : pr.state === "closed" ? "closed" : "open";
-    const headSha = pr.head?.sha ?? "";
-    if (!headSha) {
-      throw new AnalysisError("github_unavailable", "GitHub did not return a head commit for this pull request.", {
+    const state = asString(pr.merged_at)
+      ? "merged"
+      : pr.state === "closed"
+        ? "closed"
+        : "open";
+    const headSha = asString(pr.head?.sha);
+    if (!SHA_PATTERN.test(headSha)) {
+      throw new AnalysisError("github_unavailable", "GitHub did not return a usable head commit for this pull request.", {
+        status: 502,
+      });
+    }
+    const baseSha = asString(pr.base?.sha);
+    if (!SHA_PATTERN.test(baseSha)) {
+      throw new AnalysisError("github_unavailable", "GitHub did not return a usable base commit for this pull request.", {
         status: 502,
       });
     }
 
+    const labels = Array.isArray(pr.labels)
+      ? pr.labels.map((label) => asString(label?.name)).filter(Boolean)
+      : [];
+    const authorLogin = asString(pr.user?.login);
+
     return {
       owner: ref.owner,
       repo: ref.repo,
-      number: pr.number ?? ref.number,
-      url: pr.html_url ?? `https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number}`,
-      title: pr.title ?? "",
-      body: pr.body ?? "",
-      author: pr.user?.login ?? "unknown",
-      authorUrl: pr.user?.html_url ?? `https://github.com/${pr.user?.login ?? ""}`,
+      number: clampNumber(pr.number, ref.number),
+      url: asString(pr.html_url) || `https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number}`,
+      title: asString(pr.title),
+      body: asString(pr.body),
+      author: authorLogin || "unknown",
+      authorUrl: asString(pr.user?.html_url) || (authorLogin ? `https://github.com/${authorLogin}` : ""),
       state,
-      draft: Boolean(pr.draft),
-      createdAt: pr.created_at ?? "",
-      updatedAt: pr.updated_at ?? "",
-      headRef: pr.head?.ref ?? "",
+      draft: pr.draft === true,
+      createdAt: asString(pr.created_at),
+      updatedAt: asString(pr.updated_at),
+      headRef: asString(pr.head?.ref),
       headSha,
-      baseRef: pr.base?.ref ?? "",
-      baseSha: pr.base?.sha ?? "",
-      labels: (pr.labels ?? []).map((label) => label.name ?? "").filter(Boolean),
+      baseRef: asString(pr.base?.ref),
+      baseSha,
+      labels,
       repository: {
         fullName: repo.full_name,
-        url: repo.html_url ?? `https://github.com/${repo.full_name}`,
+        url: asString(repo.html_url) || `https://github.com/${repo.full_name}`,
         stars: clampNumber(repo.stargazers_count),
-        language: repo.language ?? undefined,
-        defaultBranch: repo.default_branch ?? "main",
+        language: typeof repo.language === "string" ? repo.language : undefined,
+        defaultBranch: asString(repo.default_branch) || "main",
       },
       mergeable: typeof pr.mergeable === "boolean" ? pr.mergeable : null,
-      mergeableState: pr.mergeable_state ?? "",
+      mergeableState: asString(pr.mergeable_state),
       additions: clampNumber(pr.additions),
       deletions: clampNumber(pr.deletions),
       changedFileCount: clampNumber(pr.changed_files),
@@ -275,6 +388,7 @@ export class LiveGithubSource implements PullRequestSource {
   }
 
   async getChangedFiles(ref: { owner: string; repo: string; number: number }): Promise<ChangedFile[]> {
+    assertRef(ref);
     const raw = await this.paginate<GithubFile>(
       `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/pulls/${ref.number}/files`,
       MAX_FILE_PAGES,
@@ -294,28 +408,31 @@ export class LiveGithubSource implements PullRequestSource {
   }
 
   async getCommits(ref: { owner: string; repo: string; number: number }): Promise<CommitSummary[]> {
+    assertRef(ref);
     const raw = await this.paginate<GithubCommit>(
       `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/pulls/${ref.number}/commits`,
       MAX_COMMIT_PAGES,
     );
 
     return raw
-      .filter((commit) => typeof commit.sha === "string" && commit.sha.length > 0)
+      .filter((commit) => typeof commit.sha === "string" && SHA_PATTERN.test(commit.sha))
       .map((commit) => {
         const sha = commit.sha as string;
         return {
           sha,
           shortSha: sha.slice(0, 7),
-          message: commit.commit?.message ?? "",
-          author: commit.commit?.author?.name ?? commit.author?.login ?? "unknown",
-          date: commit.commit?.author?.date ?? "",
-          verified: Boolean(commit.commit?.verification?.verified),
+          message: asString(commit.commit?.message),
+          author: asString(commit.commit?.author?.name) || asString(commit.author?.login) || "unknown",
+          date: asString(commit.commit?.author?.date),
+          verified: commit.commit?.verification?.verified === true,
         };
       });
   }
 
   async getCi(ref: { owner: string; repo: string; number: number }, headSha: string): Promise<CiSummary> {
-    const base = `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/commits/${headSha}`;
+    assertRef(ref);
+    const sha = assertSha(headSha);
+    const base = `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/commits/${sha}`;
     const sourceUrl = `https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number}/checks`;
 
     const [runsResult, statusResult] = await Promise.allSettled([
@@ -341,42 +458,73 @@ export class LiveGithubSource implements PullRequestSource {
       };
     }
 
-    const failing: CiCheck[] = [];
-    const pending: CiCheck[] = [];
-    let successful = 0;
+    // One entry per check name. Check runs win over commit statuses that
+    // describe the same job so totals are not double-counted.
+    interface Entry {
+      name: string;
+      url?: string;
+      conclusion?: string;
+      failed: boolean;
+      pending: boolean;
+    }
+    const byName = new Map<string, Entry>();
+    const record = (entry: Entry): void => {
+      const existing = byName.get(entry.name);
+      if (!existing) {
+        byName.set(entry.name, entry);
+        return;
+      }
+      existing.failed = existing.failed || entry.failed;
+      existing.pending = existing.pending && entry.pending;
+      existing.url = existing.url ?? entry.url;
+    };
 
     if (runsResult.status === "fulfilled") {
-      for (const run of runsResult.value?.check_runs ?? []) {
-        const name = run.name ?? "unnamed check";
-        const url = run.html_url ?? run.details_url;
-        const conclusion = run.conclusion ?? undefined;
-        if (run.status !== "completed") {
-          pending.push({ name, url, conclusion });
-        } else if (
+      const runs = Array.isArray(runsResult.value?.check_runs) ? runsResult.value?.check_runs ?? [] : [];
+      for (const run of runs) {
+        const name = asString(run?.name) || "unnamed check";
+        const conclusion = typeof run?.conclusion === "string" ? run.conclusion : undefined;
+        const failed =
           conclusion === "failure" ||
           conclusion === "timed_out" ||
           conclusion === "cancelled" ||
           conclusion === "action_required" ||
-          conclusion === "startup_failure"
-        ) {
-          failing.push({ name, url, conclusion });
-        } else {
-          successful += 1;
-        }
+          conclusion === "startup_failure";
+        const pending = run?.status !== "completed" && !failed;
+        record({
+          name,
+          url: asString(run?.html_url) || asString(run?.details_url) || undefined,
+          conclusion,
+          failed,
+          pending,
+        });
       }
     }
 
     if (statusResult.status === "fulfilled") {
-      for (const status of statusResult.value?.statuses ?? []) {
-        const name = status.context ?? "unnamed status";
-        if (status.state === "failure" || status.state === "error") {
-          failing.push({ name, url: status.target_url, conclusion: status.state });
-        } else if (status.state === "pending") {
-          pending.push({ name, url: status.target_url, conclusion: status.state });
-        } else {
-          successful += 1;
-        }
+      const statuses = Array.isArray(statusResult.value?.statuses) ? statusResult.value?.statuses ?? [] : [];
+      for (const status of statuses) {
+        const name = asString(status?.context) || "unnamed status";
+        if (byName.has(name)) continue;
+        const failed = status?.state === "failure" || status?.state === "error";
+        const pending = status?.state === "pending" && !failed;
+        record({
+          name,
+          url: asString(status?.target_url) || undefined,
+          conclusion: typeof status?.state === "string" ? status.state : undefined,
+          failed,
+          pending,
+        });
       }
+    }
+
+    const failing: CiCheck[] = [];
+    const pending: CiCheck[] = [];
+    let successful = 0;
+    for (const entry of byName.values()) {
+      if (entry.failed) failing.push({ name: entry.name, url: entry.url, conclusion: entry.conclusion });
+      else if (entry.pending) pending.push({ name: entry.name, url: entry.url, conclusion: entry.conclusion });
+      else successful += 1;
     }
 
     const total = successful + failing.length + pending.length;
@@ -395,8 +543,10 @@ export class LiveGithubSource implements PullRequestSource {
   }
 
   async getRepoContext(owner: string, repo: string, baseSha: string): Promise<RepoContext> {
+    assertOwnerRepo(owner, repo);
+    const sha = assertSha(baseSha);
     const contents = await this.request<GithubContentEntry[] | GithubContentEntry>(
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents?ref=${baseSha}`,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents?ref=${sha}`,
       { allowNotFound: true },
     );
 
@@ -449,12 +599,11 @@ export class LiveGithubSource implements PullRequestSource {
     path: string,
     ref: string,
   ): Promise<string | null> {
-    const encodedPath = path
-      .split("/")
-      .map((segment) => encodeURIComponent(segment))
-      .join("/");
+    assertOwnerRepo(owner, repo);
+    const segments = assertRepositoryPath(path);
+    const encodedPath = segments.map((segment) => encodeURIComponent(segment)).join("/");
     const content = await this.request<string>(
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}?ref=${ref}`,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`,
       { accept: "application/vnd.github.raw", allowNotFound: true },
     );
     return content ?? null;
