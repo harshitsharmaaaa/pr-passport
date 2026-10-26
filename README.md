@@ -51,6 +51,28 @@ flowchart LR
 4. **Interpret free-form guidance** (for example "keep pull requests reviewable in one sitting") with the configured open-weight model, then validate every claim against the schema *and* the pull request's own files and commits.
 5. **Assemble the report** with verdicts, limitations, validation commands, and the remediation brief.
 
+## Hand off to Alan
+
+The remediation brief is designed to become an Alan task verbatim. Two
+verified mechanisms (checked against [Alan's official docs](https://docs.tryalan.ai) in October 2026):
+
+1. **One-off task (recommended):** copy the brief with the report's **Copy**
+   button, create an Alan task (**Tasks > New task**), paste the brief as the
+   description, and press **Ctrl+Enter** to create the task and start an agent
+   session in one step.
+2. **Recurring automation:** Alan automations support a GitHub
+   **Pull Request Opened** trigger with free-text instructions; a ready-to-paste
+   instruction block - with built-in "do not merge or push" limits - is in
+   [examples/alan-workflow.md](examples/alan-workflow.md).
+
+There is no importable workflow JSON and no documented public API for creating
+Alan tasks, so PR Passport does not pretend otherwise. The brief ships with a
+validator, `evaluateAlanHandoff` in `src/lib/handoff/alan.ts`, which checks
+that it contains the requirement sources, evidence, validation commands,
+constraints and limitations the handoff promises, is bounded at 20,000
+characters, and carries no credential material. `examples/sample-report.json`
+is a complete demo report you can inspect before running anything.
+
 ## Checks
 
 Deterministic checks are only created when the repository's own guidelines require them (except the two platform facts, which GitHub itself reports):
