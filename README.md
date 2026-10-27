@@ -104,6 +104,23 @@ bun run dev
 
 Open <http://localhost:3000> and either paste a public pull request URL or click one of the demo fixture buttons. Demo mode needs no credentials at all.
 
+### Demo
+
+The demo is a self-contained, offline walkthrough: a hard failure with its rule
+source and evidence, a separate human-review item, the difference between
+deterministic and recorded findings, and the Alan-ready remediation brief. Every
+fixture number is asserted by `src/lib/demo/fixtures.test.ts`, and
+`examples/sample-report.json` is generated from the failing fixture.
+
+```sh
+bun run demo:sample   # regenerate examples/sample-report.json
+bun run demo:check    # fixture consistency, offline run, sample-report drift
+```
+
+See [docs/DEMO.md](./docs/DEMO.md) for the exact click sequence, what the
+audience should observe, and how to hand the brief to Alan and run its
+validation commands.
+
 ### Environment
 
 | Variable | Required | Purpose |
@@ -139,7 +156,7 @@ bun run verify      # all of the above
 bun run build       # production build
 ```
 
-Test coverage includes URL validation (host spoofing, credentials, ports), guideline extraction, every deterministic check, model-output grounding (unknown files/commits/rules, downgrade behaviour, schema strictness), report assembly, remediation-brief content, validation-command derivation, rate limiting, and end-to-end demo reproducibility.
+Test coverage includes URL validation (host spoofing, credentials, ports), guideline extraction, every deterministic check, model-output grounding (unknown files/commits/rules, downgrade behaviour, schema strictness), report assembly, remediation-brief content, validation-command derivation, rate limiting, fixture consistency, an offline demo run with no network or credentials, and drift between a fresh demo run and `examples/sample-report.json`.
 
 ## Deployment
 

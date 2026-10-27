@@ -140,16 +140,28 @@ function diffTotals(files: ChangedFile[]): { additions: number; deletions: numbe
   return { additions, deletions, total: additions + deletions };
 }
 
-function repoContext(): RepoContext {
+/** Files listed in the fixture repository tree but not read by the pipeline. */
+const UNBUNDLED_REPO_FILES = [
+  { path: "README.md", size: 8_932 },
+  { path: "bun.lock", size: 184_320 },
+  { path: "tsconfig.json", size: 612 },
+] as const;
+
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+function repoContext(repositoryFiles: Record<string, string>): RepoContext {
+  const files = [
+    ...Object.entries(repositoryFiles).map(([path, content]) => ({
+      path,
+      size: byteLength(content),
+    })),
+    ...UNBUNDLED_REPO_FILES,
+  ].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+
   return {
-    files: [
-      { path: "CONTRIBUTING.md", size: DEMO_CONTRIBUTING.length },
-      { path: "CHANGELOG.md", size: 4_210 },
-      { path: "README.md", size: 8_932 },
-      { path: "package.json", size: DEMO_PACKAGE_JSON.length },
-      { path: "bun.lockb", size: 184_320 },
-      { path: "tsconfig.json", size: 612 },
-    ],
+    files,
     packageJson: {
       raw: DEMO_PACKAGE_JSON,
       scripts: { build: "next build", lint: "eslint .", test: "bun test", typecheck: "tsc --noEmit" },
@@ -328,14 +340,22 @@ function failingScenario(): DemoScenario {
       },
     ],
     notes: [
-      "The interpreter receives file paths and metadata only, not the diff, so design feedback is limited to what the description and file list show.",
+      "The recorded run sees the description, the file list, the commit summaries, and bounded diff excerpts. It never sees the full diff, so the design finding rests on the new public file and the description.",
     ],
+  };
+
+  const repositoryFiles = {
+    "CONTRIBUTING.md": DEMO_CONTRIBUTING,
+    ".github/PULL_REQUEST_TEMPLATE.md": DEMO_TEMPLATE,
+    "package.json": DEMO_PACKAGE_JSON,
+    "CHANGELOG.md": "# Changelog\n\n## Unreleased\n\n## 3.4.1\n\n- Previous release notes.\n",
   };
 
   return {
     slug: "failing",
-    label: "Failing pull request",
-    description: "Missing DCO sign-off, no tests, unchecked template items, failing CI, and a review-size problem.",
+    label: "Sample: failing PR",
+    description:
+      "Bundled fixture: missing DCO sign-off, no tests, unchecked template items, failing CI, and a review-size problem.",
     url: pr.url,
     pr,
     changedFiles: FAILING_FILES,
@@ -361,13 +381,8 @@ function failingScenario(): DemoScenario {
       ],
       sourceUrl: `${pr.url}/checks`,
     },
-    repoContext: repoContext(),
-    repositoryFiles: {
-      "CONTRIBUTING.md": DEMO_CONTRIBUTING,
-      ".github/PULL_REQUEST_TEMPLATE.md": DEMO_TEMPLATE,
-      "package.json": DEMO_PACKAGE_JSON,
-      "CHANGELOG.md": "# Changelog\n\n## Unreleased\n\n## 3.4.1\n\n- Previous release notes.\n",
-    },
+    repoContext: repoContext(repositoryFiles),
+    repositoryFiles,
     recording,
   };
 }
@@ -392,6 +407,25 @@ function cleanScenario(): DemoScenario {
     model: "recorded:qwen2.5-coder-32b-instruct",
     findings: [
       {
+        heading: "Design notes",
+        status: "pass",
+        rationale:
+          "This pull request only corrects a documentation example and adds a test for it. It does not add a public API, so the design-notes requirement does not apply and nothing is missing from the description.",
+        confidence: 0.9,
+        evidence: [
+          {
+            kind: "file",
+            ref: "docs/api/pagination.md",
+            note: "The change updates the existing API guide; no public API is introduced.",
+          },
+          {
+            kind: "body",
+            ref: "body",
+            note: "The description scopes the change to the pagination example.",
+          },
+        ],
+      },
+      {
         heading: "Review process",
         status: "pass",
         rationale: `The diff is limited to ${CLEAN_FILES.length} files and ${totals.total} changed lines, all serving the documentation fix, which a reviewer can assess in one sitting.`,
@@ -405,13 +439,23 @@ function cleanScenario(): DemoScenario {
         ],
       },
     ],
-    notes: ["The design-notes rule did not apply because this pull request does not add a public API."],
+    notes: [
+      "The design-notes rule was evaluated and marked satisfied because this pull request does not add a public API.",
+    ],
+  };
+
+  const repositoryFiles = {
+    "CONTRIBUTING.md": DEMO_CONTRIBUTING,
+    ".github/PULL_REQUEST_TEMPLATE.md": DEMO_TEMPLATE,
+    "package.json": DEMO_PACKAGE_JSON,
+    "CHANGELOG.md": "# Changelog\n\n## Unreleased\n\n- Fix the pagination example in the API guide. (#201)\n",
   };
 
   return {
     slug: "clean",
-    label: "Clean pull request",
-    description: "Signed-off commit, tested change, checked template, passing CI, and a focused diff.",
+    label: "Sample: clean PR",
+    description:
+      "Bundled fixture: signed-off commit, tested change, checked template, passing CI, and a focused diff.",
     url: pr.url,
     pr,
     changedFiles: CLEAN_FILES,
@@ -425,13 +469,8 @@ function cleanScenario(): DemoScenario {
       pending: [],
       sourceUrl: `${pr.url}/checks`,
     },
-    repoContext: repoContext(),
-    repositoryFiles: {
-      "CONTRIBUTING.md": DEMO_CONTRIBUTING,
-      ".github/PULL_REQUEST_TEMPLATE.md": DEMO_TEMPLATE,
-      "package.json": DEMO_PACKAGE_JSON,
-      "CHANGELOG.md": "# Changelog\n\n## Unreleased\n\n- Fix the pagination example in the API guide. (#201)\n",
-    },
+    repoContext: repoContext(repositoryFiles),
+    repositoryFiles,
     recording,
   };
 }

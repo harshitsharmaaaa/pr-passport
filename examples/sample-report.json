@@ -1,6 +1,6 @@
 {
   "schema": "pr-passport.report.v1",
-  "generatedAt": "2026-10-26T18:44:13.064Z",
+  "generatedAt": "2026-10-26T20:09:22.094Z",
   "mode": "demo",
   "repository": {
     "fullName": "acme/widget-kit",
@@ -542,10 +542,10 @@
     "model": "recorded:qwen2.5-coder-32b-instruct",
     "rejectedFindings": 0,
     "notes": [
-      "The interpreter receives file paths and metadata only, not the diff, so design feedback is limited to what the description and file list show."
+      "The recorded run sees the description, the file list, the commit summaries, and bounded diff excerpts. It never sees the full diff, so the design finding rests on the new public file and the description."
     ]
   },
   "timings": {
-    "totalMs": 30
+    "totalMs": 10
   }
 }

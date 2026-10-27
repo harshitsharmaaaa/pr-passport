@@ -41,7 +41,9 @@ const MAX_TIMEOUT_MS = 120_000;
  * Configuration is read from the environment at call time so that the app can
  * run without credentials and report inference as unavailable.
  */
-export function readInferenceConfig(env: NodeJS.ProcessEnv = process.env): InferenceConfig | null {
+export function readInferenceConfig(
+  env: Record<string, string | undefined> = process.env,
+): InferenceConfig | null {
   const baseUrl = env.INFERENCE_BASE_URL?.trim();
   const model = env.INFERENCE_MODEL?.trim();
   if (!baseUrl || !model) return null;

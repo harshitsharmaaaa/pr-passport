@@ -10,6 +10,8 @@
     "start": "next start",
     "test": "bun test src",
     "test:watch": "bun test --watch src",
+    "demo:check": "bun test src/lib/demo",
+    "demo:sample": "bun run scripts/generate-sample-report.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "verify": "bun run typecheck && bun run lint && bun run test"

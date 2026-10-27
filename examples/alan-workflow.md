@@ -189,7 +189,7 @@ forbidden from merging, pushing, or inventing rules.
 Rehearsed end to end; no GitHub or model credentials needed.
 
 1. `bun install && bun run dev` - open `http://localhost:3000`. *(~30 s)*
-2. Click the **Failing pull request** demo button. The FAIL report appears
+2. Click the **Sample: failing PR** demo button. The FAIL report appears
    with the verdict stamp and findings. *(~5 s)*
 3. On the **Alan-ready remediation brief** panel, click **Copy**. *(~2 s)*
 4. In Alan: **Tasks > New task**, title it
