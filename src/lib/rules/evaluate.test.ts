@@ -219,6 +219,26 @@ describe("CI", () => {
     expect(run(makeSpec("ci_green")).status).toBe("pass");
   });
 
+  it("does not call skipped or neutral checks passes", () => {
+    const ci = makeCi({
+      state: "success",
+      total: 4,
+      successful: 4,
+      passing: [
+        { name: "unit", conclusion: "success" },
+        { name: "docs", conclusion: "success" },
+        { name: "e2e", conclusion: "skipped" },
+        { name: "preview", conclusion: "neutral" },
+      ],
+    });
+    const finding = run(makeSpec("ci_green"), makeContext({ ci }));
+    expect(finding.status).toBe("pass");
+    expect(finding.evidence[0]?.detail).toContain("2 of 4 reported checks passed");
+    expect(finding.evidence[0]?.detail).toContain("2 skipped or neutral");
+    expect(finding.rationale).toContain("No reported check failed");
+    expect(finding.rationale).not.toContain("All 4");
+  });
+
   it("fails and names failing checks", () => {
     const ci = makeCi({
       state: "failure",
@@ -229,6 +249,7 @@ describe("CI", () => {
     const finding = run(makeSpec("ci_green"), makeContext({ ci }));
     expect(finding.status).toBe("fail");
     expect(finding.evidence[0]?.label).toContain("unit tests");
+    expect(finding.rationale).toContain("1 of 2 reported checks failed");
   });
 
   it("asks for review while checks are pending", () => {

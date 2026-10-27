@@ -18,6 +18,18 @@ function formatUtc(value: string): string {
   return `${MONTHS[Number(month) - 1]} ${Number(dateOfMonth)}, ${day.slice(0, 4)} · ${time.slice(0, 5)} UTC`;
 }
 
+/**
+ * `successful` counts every check that did not fail, including checks GitHub
+ * skipped or marked neutral. Split those out so the UI does not call them
+ * passes.
+ */
+function ciCounts(ci: Report["checks"]["ci"]): { passed: number; skipped: number } {
+  const skipped = (ci.passing ?? []).filter(
+    (check) => check.conclusion === "skipped" || check.conclusion === "neutral",
+  ).length;
+  return { passed: Math.max(0, ci.successful - skipped), skipped };
+}
+
 function ModeBadge({ mode }: { mode: Report["mode"] }) {
   const demo = mode === "demo";
   return (
@@ -128,10 +140,11 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function ReportHeader({ report }: { report: Report }) {
   const { pullRequest, repository, checks, guidelines } = report;
+  const ciCount = ciCounts(report.checks.ci);
   const ciValue = !report.checks.ci.available
     ? "Unavailable"
     : report.checks.ci.total > 0
-      ? `${report.checks.ci.successful}/${report.checks.ci.total}`
+      ? `${ciCount.passed}/${report.checks.ci.total}`
       : "None";
 
   return (
@@ -223,7 +236,7 @@ function ReportHeader({ report }: { report: Report }) {
         <Metric label="Changed files" value={String(checks.changedFiles)} />
         <Metric label="Lines" value={`+${checks.additions} / −${checks.deletions}`} />
         <Metric label="Commits" value={String(checks.commits)} />
-        <Metric label="CI checks" value={ciValue} />
+        <Metric label="CI passed" value={ciValue} />
         <Metric label="Rule files" value={String(guidelines.files.length)} />
       </dl>
     </Card>
@@ -238,6 +251,8 @@ function CiSection({ report }: { report: Report }) {
   const ci = report.checks.ci;
   const mergeable = report.checks.mergeable;
   const checksUrl = ci.sourceUrl ?? `${report.pullRequest.url}/checks`;
+  const counts = ciCounts(ci);
+  const skippedNote = counts.skipped > 0 ? ` ${counts.skipped} skipped or neutral.` : "";
 
   const status = !ci.available
     ? { dot: "bg-ink-subtle", label: "Unavailable", detail: ci.reason ?? "GitHub did not expose checks for this commit." }
@@ -245,7 +260,7 @@ function CiSection({ report }: { report: Report }) {
       ? {
           dot: "bg-danger",
           label: "Failing",
-          detail: `${ci.failing.length} of ${ci.total} reported check${ci.total === 1 ? "" : "s"} did not pass.${
+          detail: `${ci.failing.length} of ${ci.total} reported checks failed.${skippedNote}${
             ci.pending.length > 0 ? ` ${ci.pending.length} still running.` : ""
           }`,
         }
@@ -253,13 +268,13 @@ function CiSection({ report }: { report: Report }) {
         ? {
             dot: "bg-warning",
             label: "Pending",
-            detail: `${ci.pending.length} of ${ci.total} check${ci.total === 1 ? "" : "s"} have not finished.`,
+            detail: `${ci.pending.length} of ${ci.total} checks have not finished.${skippedNote}`,
           }
         : ci.state === "success"
           ? {
               dot: "bg-success",
               label: "Passing",
-              detail: `${ci.successful} of ${ci.total} checks passed.`,
+              detail: `${counts.passed} of ${ci.total} checks passed.${skippedNote}`,
             }
           : { dot: "bg-ink-subtle", label: "No checks", detail: "No CI checks were reported for this commit." };
 
@@ -426,7 +441,9 @@ function ModelSection({ report }: { report: Report }) {
       ) : null}
 
       <p className="mt-2 text-[11px] leading-4 text-ink-subtle">
-        Model output is schema-validated and grounded in this pull request&apos;s own files and commits.
+        {model.used
+          ? "Model output is schema-validated and grounded in this pull request's own files and commits."
+          : "No model output is included in this report."}
       </p>
     </section>
   );

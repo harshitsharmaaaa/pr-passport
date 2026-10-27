@@ -427,6 +427,12 @@ function checkSizeLimit(spec: RuleSpec, ctx: EvaluationContext): Finding {
   );
 }
 
+function skippedCheckCount(ci: EvaluationContext["ci"]): number {
+  return (ci.passing ?? []).filter(
+    (check) => check.conclusion === "skipped" || check.conclusion === "neutral",
+  ).length;
+}
+
 function checkCi(spec: RuleSpec, ctx: EvaluationContext): Finding {
   const ci = ctx.ci;
   if (!ci.available) {
@@ -440,15 +446,27 @@ function checkCi(spec: RuleSpec, ctx: EvaluationContext): Finding {
   }
 
   if (ci.state === "success") {
+    // `successful` also counts checks GitHub skipped or reported as neutral.
+    // They are not failures, but they are not passes either — say so.
+    const skipped = skippedCheckCount(ci);
+    const passed = Math.max(0, ci.successful - skipped);
     return finalize(
       spec,
       "pass",
-      [metadataEvidence("CI", `${ci.successful} of ${ci.total} reported checks passed.`)],
-      `All ${ci.total} reported checks for the head commit passed.`,
+      [
+        metadataEvidence(
+          "CI",
+          `${passed} of ${ci.total} reported checks passed${skipped > 0 ? `; ${skipped} skipped or neutral` : ""}.`,
+        ),
+      ],
+      skipped > 0
+        ? `No reported check failed. ${passed} passed and ${skipped} skipped or neutral.`
+        : `All ${ci.total} reported checks for the head commit passed.`,
     );
   }
 
   if (ci.state === "failure") {
+    const skipped = skippedCheckCount(ci);
     return finalize(
       spec,
       "fail",
@@ -458,7 +476,7 @@ function checkCi(spec: RuleSpec, ctx: EvaluationContext): Finding {
         detail: `conclusion: ${check.conclusion ?? "failure"}`,
         url: check.url,
       })),
-      `${ci.failing.length} of ${ci.total} reported checks did not pass.`,
+      `${ci.failing.length} of ${ci.total} reported checks failed${skipped > 0 ? `; ${skipped} skipped or neutral` : ""}.`,
       "Fix the failing checks and push the fix. PR Passport does not run or re-run CI.",
     );
   }

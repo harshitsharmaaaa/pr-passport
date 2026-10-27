@@ -52,7 +52,17 @@ function snippetLines(doc: MarkdownDoc): { line: number; command: string }[] {
 
     if (!command || command.startsWith("#") || command.length > 140) return;
     if (!RUNNER_PATTERN.test(command)) return;
-    if (command.includes("…") || command.includes("<") || command.includes(">")) return;
+    // Skip documentation placeholders: `<package>`, `{commit}`, and ellipses.
+    // A brief must not hand an agent a command that cannot run as written.
+    if (
+      command.includes("…") ||
+      command.includes("<") ||
+      command.includes(">") ||
+      command.includes("{") ||
+      command.includes("}")
+    ) {
+      return;
+    }
     results.push({ line: index + 1, command });
   });
 

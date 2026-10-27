@@ -428,9 +428,9 @@ export async function analyzePullRequest(options: AnalyzeOptions): Promise<Repor
           }
         }
 
-        // The prompt tells the model to omit rules that clearly do not apply, so a
-// partial answer is intentional. A completely empty answer is different: the
-// rules were never resolved and must stay visible in the verdict.
+        // The prompt requires one finding per supplied ruleId, and the
+        // interpreter rejects partial answers. An entirely empty answer is
+        // different: those rules stay visible as pending and out of PASS.
         if (modelFindings.length === 0 && ruleBundle.freeform.length > 0) {
           pendingRules = pendingFor(
             ruleBundle.freeform,

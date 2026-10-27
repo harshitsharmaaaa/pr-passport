@@ -58,6 +58,7 @@ Run these:
 $ bun run test
 bun run lint # check style
 npm install <package>
+npm i https://pkg.pr.new/vitest@{commit}
 \`\`\`
 `),
     });
@@ -65,6 +66,7 @@ npm install <package>
     expect(values[0]).toBe("bun run test");
     expect(values[1]).toBe("bun run lint");
     expect(values).not.toContain("npm install <package>");
+    expect(values).not.toContain("npm i https://pkg.pr.new/vitest@{commit}");
     expect(commands[0]?.source.lineStart).toBeGreaterThan(0);
     expect(commands[0]?.reason).toContain("CONTRIBUTING.md line");
   });

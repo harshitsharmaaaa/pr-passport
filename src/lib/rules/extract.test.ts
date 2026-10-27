@@ -142,6 +142,35 @@ describe("extractGuidelineRules", () => {
       extractGuidelineRules(doc.docs, {}).some((spec) => spec.kind === "changelog_updated"),
     ).toBe(false);
   });
+
+  it("does not turn a commit-message convention into PR title or changelog rules", () => {
+    const doc = makeGuidelines(
+      "# Contributing\n\n## Pull request requirements\n\n- Commit messages must follow the commit message convention so that changelogs can be automatically generated.\n",
+    );
+    const kinds = extractGuidelineRules(doc.docs, {}).map((spec) => spec.kind as string);
+    expect(kinds).not.toContain("conventional_title");
+    expect(kinds).not.toContain("changelog_updated");
+  });
+
+  it("recognizes a title rule phrased with the PR after the convention name", () => {
+    const doc = makeGuidelines(
+      "# Contributing\n\n## Pull request requirements\n\n- PR titles must follow Conventional Commits (`feat:`, `fix:`).\n",
+    );
+    const title = extractGuidelineRules(doc.docs, {}).find(
+      (spec) => spec.kind === "conventional_title",
+    );
+    expect(title).toBeDefined();
+    expect(title?.params?.allowedPrefixes).toEqual(["feat", "fix"]);
+  });
+
+  it("recognizes a changeset requirement as a changelog requirement", () => {
+    const doc = makeGuidelines(
+      "# Contributing\n\n## Pull request requirements\n\n- Add a changeset for every user-facing change.\n",
+    );
+    expect(
+      extractGuidelineRules(doc.docs, {}).some((spec) => spec.kind === "changelog_updated"),
+    ).toBe(true);
+  });
 });
 
 describe("extractTemplateRules", () => {

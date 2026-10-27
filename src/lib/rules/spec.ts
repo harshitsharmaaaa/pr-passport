@@ -129,8 +129,11 @@ const DETECTORS: Detector[] = [
   {
     kind: "conventional_title",
     title: "Pull request title format",
+    // Only claim a title rule when the guideline is about the pull request
+    // title. A commit-message convention is a different requirement and must
+    // not be turned into a PR title check.
     pattern:
-      /(conventional commits?|commit message (?:format|convention|style)|title (?:format|prefix|convention)|prefix(?:ed)?\s+(?:your\s+|the\s+)?(?:commit|pr|pull request)|semantic (?:commit|pr))/i,
+      /(?:conventional|semantic)\s+commits?[^.\n]{0,80}\b(?:pull request|pr)\b|\b(?:pull request|pr)\s+titles?\b[^.\n]{0,80}(?:conventional|semantic|format|prefix|convention)|\btitles?\s+(?:format|prefix|convention)\b|\bprefix(?:ed)?\s+(?:your\s+|the\s+)?(?:pull request|pr)\b/i,
     build: (text) => {
       const allowedPrefixes = detectAllowedPrefixes(text);
       return allowedPrefixes ? { params: { allowedPrefixes } } : {};
@@ -139,7 +142,10 @@ const DETECTORS: Detector[] = [
   {
     kind: "changelog_updated",
     title: "Changelog entry",
-    pattern: /(changelog|changes\.md|changeset|release notes)/i,
+    // Require an actual changelog/changeset action. Sentences that merely
+    // mention that changelogs are generated are not requirements to touch one.
+    pattern:
+      /(?:add|include|update|write|create|maintain|record|document|ensure|need|require)\w*\s+(?:an?|the\s+)?(?:new\s+)?(?:entr(?:y|ies)|notes?|items?)?\s*(?:in|to|under|for)?\s*(?:the\s+)?(?:changelog|changes\.md|changesets?|release notes)|(?:changelog|release notes|changesets?)\s+(?:entr(?:y|ies)|update|file)|(?:update|modify|edit)\s+(?:the\s+)?(?:changelog|changes\.md|release notes)/i,
   },
   {
     kind: "tests_added",
