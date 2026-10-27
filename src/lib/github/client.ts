@@ -520,11 +520,15 @@ export class LiveGithubSource implements PullRequestSource {
 
     const failing: CiCheck[] = [];
     const pending: CiCheck[] = [];
+    const passing: CiCheck[] = [];
     let successful = 0;
     for (const entry of byName.values()) {
       if (entry.failed) failing.push({ name: entry.name, url: entry.url, conclusion: entry.conclusion });
       else if (entry.pending) pending.push({ name: entry.name, url: entry.url, conclusion: entry.conclusion });
-      else successful += 1;
+      else {
+        successful += 1;
+        passing.push({ name: entry.name, url: entry.url, conclusion: entry.conclusion });
+      }
     }
 
     const total = successful + failing.length + pending.length;
@@ -538,6 +542,7 @@ export class LiveGithubSource implements PullRequestSource {
       successful,
       failing,
       pending,
+      passing,
       sourceUrl,
     };
   }

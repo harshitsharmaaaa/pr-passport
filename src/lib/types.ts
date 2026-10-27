@@ -99,6 +99,11 @@ export interface CiSummary {
   successful: number;
   failing: CiCheck[];
   pending: CiCheck[];
+  /**
+   * Names of checks that passed, when the source can report them. Used to
+   * verify that model evidence naming a check actually exists.
+   */
+  passing?: CiCheck[];
   sourceUrl?: string;
 }
 

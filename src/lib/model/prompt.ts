@@ -104,24 +104,38 @@ export function buildDossier(input: FreeformInput): Record<string, unknown> {
   };
 }
 
+const DELIMITER_TAG_PATTERN = /<\/?untrusted_pull_request_data\s*>/gi;
+const DELIMITER_REPLACEMENT = "[delimiter tag removed]";
+
+/**
+ * Remove anything that could forge the untrusted-data boundary. Untrusted text
+ * containing the literal tags would otherwise close the region early and put
+ * injected instructions outside it.
+ */
+export function neutralizeDelimiters(value: string): string {
+  return value.replace(DELIMITER_TAG_PATTERN, DELIMITER_REPLACEMENT);
+}
+
 export function buildMessages(input: FreeformInput): { system: string; user: string } {
   const dossier = buildDossier(input);
+  const rules = input.rules
+    .map((rule, index) => {
+      const lines = [
+        `${index + 1}. ruleId: ${rule.id}`,
+        `   title: ${neutralizeDelimiters(rule.title)}`,
+        `   source: ${neutralizeDelimiters(rule.source.label)}`,
+        `   requirement: ${neutralizeDelimiters(rule.requirement)}`,
+      ];
+      if (rule.source.excerpt) lines.push(`   excerpt: ${neutralizeDelimiters(rule.source.excerpt)}`);
+      return lines.join("\n");
+    })
+    .join("\n\n");
+
   const user = `Rules to evaluate:
-${input.rules
-  .map((rule, index) => {
-    const lines = [
-      `${index + 1}. ruleId: ${rule.id}`,
-      `   title: ${rule.title}`,
-      `   source: ${rule.source.label}`,
-      `   requirement: ${rule.requirement}`,
-    ];
-    if (rule.source.excerpt) lines.push(`   excerpt: ${rule.source.excerpt}`);
-    return lines.join("\n");
-  })
-  .join("\n\n")}
+${rules}
 
 <untrusted_pull_request_data>
-${JSON.stringify(dossier, null, 2)}
+${neutralizeDelimiters(JSON.stringify(dossier, null, 2))}
 </untrusted_pull_request_data>
 
 Evaluate only the rules listed above. Return JSON only.`;

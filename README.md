@@ -7,9 +7,9 @@
 
 Paste a pull request URL. PR Passport reads the repository's `CONTRIBUTING` file and PR template at the pull request's base commit, evaluates what can be checked deterministically, asks an open-weight model to interpret the free-form parts, and returns a verdict:
 
-- **PASS** — every evaluated requirement passed.
+- **PASS** - every requirement was evaluated and passed. A rule that could not be evaluated keeps the report out of PASS.
 - **FAIL** — at least one requirement failed, with the rule source and pull request evidence that decided it.
-- **NEEDS HUMAN REVIEW** — automated evidence was insufficient or the requirement is conditional. No guess is made.
+- **NEEDS HUMAN REVIEW** - automated evidence was insufficient, the requirement is conditional, or a guideline rule could not be evaluated. No guess is made.
 
 Every finding carries two things that are usually missing from automated review tools:
 

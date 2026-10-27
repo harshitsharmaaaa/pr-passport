@@ -310,9 +310,27 @@ export async function analyzePullRequest(options: AnalyzeOptions): Promise<Repor
       ? guidelinesResult.value
       : emptyGuidelines(reasonFor(guidelinesResult.reason));
 
-  if (guidelines.files.length === 0) {
+  const guidelineFilesWereRead = guidelines.files.length > 0;
+  const templateWasRead = Boolean(guidelines.template);
+  if (!guidelineFilesWereRead) {
+    // Distinguish "we looked and found nothing" from "we could not read them",
+    // and do not claim only platform checks ran when a template supplied rules.
+    const checkedPaths = Array.from(
+      new Set([...guidelines.missing, ...guidelines.unavailable.map((entry) => entry.path)]),
+    );
+    const checkedText =
+      checkedPaths.length > 0
+        ? ` (checked ${checkedPaths.slice(0, 6).join(", ")}${checkedPaths.length > 6 ? ", ..." : ""})`
+        : "";
+    const unreadableText =
+      guidelines.unavailable.length > 0
+        ? ` Could not read ${guidelines.unavailable.length} candidate file(s); see the limitations below.`
+        : "";
+    const evaluatedText = templateWasRead
+      ? " Pull request template checks and platform checks were evaluated."
+      : " Only platform checks were evaluated.";
     limitations.push(
-      `No contribution guidelines were found at the base commit (checked ${guidelines.missing.slice(0, 6).join(", ")}). Only platform checks were evaluated.`,
+      `No contribution guidelines were found at the base commit${checkedText}.${unreadableText}${evaluatedText}`,
     );
   }
   for (const unavailable of guidelines.unavailable) {
@@ -408,6 +426,16 @@ export async function analyzePullRequest(options: AnalyzeOptions): Promise<Repor
               "The model returned no findings for the free-form rules, so those rules remain unresolved.",
             );
           }
+        }
+
+        // The prompt tells the model to omit rules that clearly do not apply, so a
+// partial answer is intentional. A completely empty answer is different: the
+// rules were never resolved and must stay visible in the verdict.
+        if (modelFindings.length === 0 && ruleBundle.freeform.length > 0) {
+          pendingRules = pendingFor(
+            ruleBundle.freeform,
+            "The model returned no finding for this rule, so it was not evaluated.",
+          );
         }
       } catch (error) {
         const message = error instanceof AnalysisError ? error.message : "The model interpretation failed.";

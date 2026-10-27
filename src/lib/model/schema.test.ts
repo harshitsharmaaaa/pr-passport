@@ -199,6 +199,30 @@ describe("validateModelResponse", () => {
     expect(result.findings[0]?.status).toBe("needs_review");
   });
 
+  it("requires a named CI check to be one GitHub actually reported", () => {
+    const grounding = { ...GROUNDING, ciChecks: ["unit tests", "lint"] };
+
+    const known = validateModelResponse(
+      response([single({ evidence: [{ kind: "ci", ref: "Unit Tests", note: "Passed." }] })]),
+      grounding,
+    );
+    expect(known.findings[0]?.evidence[0]?.resolved).toBe("unit tests");
+
+    const generic = validateModelResponse(
+      response([single({ evidence: [{ kind: "ci", ref: "checks", note: "All checks passed." }] })]),
+      grounding,
+    );
+    expect(generic.findings[0]?.evidence[0]?.resolved).toBe("ci");
+
+    const fabricated = validateModelResponse(
+      response([single({ evidence: [{ kind: "ci", ref: "deploy-to-production", note: "Green." }] })]),
+      grounding,
+    );
+    expect(fabricated.findings[0]?.evidence).toEqual([]);
+    expect(fabricated.findings[0]?.status).toBe("needs_review");
+    expect(fabricated.issues.some((issue) => issue.code === "unknown_evidence")).toBe(true);
+  });
+
   it("accepts title and body references only in recognised forms", () => {
     const ok = validateModelResponse(
       response([

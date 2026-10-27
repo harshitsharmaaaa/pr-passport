@@ -159,8 +159,12 @@ export function buildRemediationPrompt(input: RemediationBriefInput): string {
   if (input.pendingRules.length > 0) {
     lines.push("## Not evaluated");
     lines.push("");
+    lines.push(
+      "These requirements were not evaluated, so their guidance is not reproduced here. Open the source file to read it; do not act on unverified text.",
+    );
+    lines.push("");
     for (const rule of input.pendingRules) {
-      lines.push(`- **${rule.title}** — ${inline(rule.requirement, 300)}`);
+      lines.push(`- **${rule.title}**`);
       lines.push(`  - Source: \`${rule.source.path ?? rule.source.label}${rule.source.lineStart ? `:${rule.source.lineStart}` : ""}\``);
       lines.push(`  - Reason: ${inline(rule.reason, 260)}`);
     }

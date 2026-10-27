@@ -50,6 +50,9 @@ export function createRecordedInterpreter(run: RecordedModelRun): FreeformInterp
         files: input.files.map((file) => file.filename),
         commits: input.commits.map((commit) => ({ sha: commit.sha, shortSha: commit.shortSha })),
         hasCi: input.ci.available,
+        ciChecks: [...input.ci.failing, ...input.ci.pending, ...(input.ci.passing ?? [])].map(
+          (check) => check.name,
+        ),
       });
 
       return {

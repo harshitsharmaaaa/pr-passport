@@ -30,17 +30,27 @@ export interface ReportInput {
 
 const STATUS_RANK: Record<FindingStatus, number> = { fail: 0, needs_review: 1, pass: 2 };
 
-function verdictFor(pass: number, fail: number, needsReview: number): Verdict {
+function verdictFor(pass: number, fail: number, needsReview: number, pending: number): Verdict {
   if (fail > 0) return "fail";
-  if (needsReview > 0) return "needs_review";
+  // Rules that were never evaluated must not let a report pass silently.
+  if (needsReview > 0 || pending > 0) return "needs_review";
   return pass > 0 ? "pass" : "needs_review";
 }
 
-function headlineFor(verdict: Verdict, pass: number, fail: number, needsReview: number): string {
+function headlineFor(
+  verdict: Verdict,
+  pass: number,
+  fail: number,
+  needsReview: number,
+  pending: number,
+): string {
   if (verdict === "fail") {
     return `${fail} requirement${fail === 1 ? "" : "s"} failed. Fix ${fail === 1 ? "it" : "them"} before requesting review.`;
   }
   if (verdict === "needs_review") {
+    if (needsReview === 0 && pending > 0) {
+      return `${pending} guideline rule${pending === 1 ? "" : "s"} could not be evaluated automatically. A human should review them.`;
+    }
     if (needsReview === 0) {
       return "No requirements could be evaluated from the available data. A human should review this pull request.";
     }
@@ -54,7 +64,7 @@ export function assembleReport(input: ReportInput): Report {
   const pass = findings.filter((finding) => finding.status === "pass").length;
   const fail = findings.filter((finding) => finding.status === "fail").length;
   const needsReview = findings.filter((finding) => finding.status === "needs_review").length;
-  const verdict = verdictFor(pass, fail, needsReview);
+  const verdict = verdictFor(pass, fail, needsReview, input.pendingRules.length);
   const limitations = Array.from(new Set(input.limitations.filter(Boolean)));
 
   const {
@@ -112,7 +122,7 @@ export function assembleReport(input: ReportInput): Report {
       fail,
       needsReview,
       verdict,
-      headline: headlineFor(verdict, pass, fail, needsReview),
+      headline: headlineFor(verdict, pass, fail, needsReview, input.pendingRules.length),
     },
     limitations,
     validationCommands: input.validationCommands,

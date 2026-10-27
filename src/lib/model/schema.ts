@@ -36,6 +36,8 @@ export interface GroundingContext {
   files: string[];
   commits: { sha: string; shortSha: string }[];
   hasCi: boolean;
+  /** Names of checks GitHub actually reported for the head commit. */
+  ciChecks?: string[];
 }
 
 export interface ValidatedEvidence extends ModelEvidence {
@@ -121,6 +123,33 @@ function resolveCommitRef(ref: string, commits: GroundingContext["commits"]): st
 function resolveMetadataRef(ref: string): string | null {
   const value = ref.trim().toLowerCase().replace(/^pull_request\./, "").replace(/\s+/g, "_");
   return METADATA_KEYS.has(value) ? value : null;
+}
+
+/** Refs that describe CI as a whole rather than naming a specific check. */
+const GENERIC_CI_REFS = new Set([
+  "ci",
+  "check",
+  "checks",
+  "status",
+  "statuses",
+  "all checks",
+  "combined status",
+  "check run",
+  "check runs",
+  "check-runs",
+]);
+
+/**
+ * A named check must match a check GitHub actually reported; otherwise the
+ * model could invent a green "deploy-to-production" run and carry a PASS with
+ * fabricated evidence.
+ */
+function resolveCiRef(ref: string, ctx: GroundingContext): string | null {
+  const value = ref.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!value) return null;
+  if (GENERIC_CI_REFS.has(value)) return "ci";
+  const known = (ctx.ciChecks ?? []).find((name) => name.trim().toLowerCase().replace(/\s+/g, " ") === value);
+  return known ?? null;
 }
 
 /**
@@ -242,7 +271,16 @@ export function validateModelResponse(raw: unknown, ctx: GroundingContext): Vali
           });
           continue;
         }
-        evidence.push({ ...item, note, resolved: sanitizeText(item.ref, 120) || "ci" });
+        const resolvedCi = resolveCiRef(item.ref, ctx);
+        if (!resolvedCi) {
+          issues.push({
+            code: "unknown_evidence",
+            message: `Dropped CI evidence for "${sanitizeText(item.ref, 80)}" because this pull request reported no such check.`,
+            ruleId: finding.ruleId,
+          });
+          continue;
+        }
+        evidence.push({ ...item, note, resolved: resolvedCi });
         continue;
       }
 

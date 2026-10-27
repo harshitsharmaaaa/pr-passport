@@ -31,9 +31,16 @@ function section(prompt: string, heading: string): string {
   return prompt.slice(start, next === -1 ? undefined : next);
 }
 
-function expectedVerdict(pass: number, fail: number, needsReview: number): PassportReport["summary"]["verdict"] {
+function expectedVerdict(
+  pass: number,
+  fail: number,
+  needsReview: number,
+  pending: number,
+): PassportReport["summary"]["verdict"] {
   if (fail > 0) return "fail";
-  if (needsReview > 0) return "needs_review";
+  // Unevaluated rules keep a report out of PASS; the pipeline records them in
+  // pendingRules, which the summary headline must reflect.
+  if (needsReview > 0 || pending > 0) return "needs_review";
   return pass > 0 ? "pass" : "needs_review";
 }
 
@@ -46,13 +53,17 @@ function assertSummaryMatchesFindings(report: Report): void {
   expect(report.summary.fail).toBe(fail);
   expect(report.summary.needsReview).toBe(needsReview);
   expect(pass + fail + needsReview).toBe(report.findings.length);
-  expect(report.summary.verdict).toBe(expectedVerdict(pass, fail, needsReview));
+  expect(report.summary.verdict).toBe(
+    expectedVerdict(pass, fail, needsReview, report.pendingRules.length),
+  );
 
   if (report.summary.verdict === "fail") {
     expect(report.summary.headline).toContain(`${fail} requirement`);
     expect(report.summary.headline).toContain("failed");
   } else if (report.summary.verdict === "needs_review") {
-    if (needsReview === 0) {
+    if (needsReview === 0 && report.pendingRules.length > 0) {
+      expect(report.summary.headline).toContain("could not be evaluated");
+    } else if (needsReview === 0) {
       expect(report.summary.headline).toContain("No requirements could be evaluated");
     } else {
       expect(report.summary.headline).toContain(`${needsReview} requirement`);

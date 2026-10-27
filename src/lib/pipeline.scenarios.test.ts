@@ -139,7 +139,7 @@ Describe the change and why it is needed.
     expect(report.limitations.join(" ")).toContain("No contribution guidelines were found");
   });
 
-  it.failing("does not claim that only platform checks ran when template rules were applied", async () => {
+  it("does not claim that only platform checks ran when template rules were applied", async () => {
     const source = withOverrides(demoSource(), {
       readRepositoryFile: async (_owner, _repo, path) =>
         path === ".github/PULL_REQUEST_TEMPLATE.md" ? TEMPLATE : null,
@@ -175,7 +175,7 @@ Describe the change and why it is needed.
     expect(report.pendingRules).toEqual([]);
   });
 
-  it.failing("does not print an empty checked-file list when every guideline read failed", async () => {
+  it("does not print an empty checked-file list when every guideline read failed", async () => {
     const unreadable = withOverrides(demoSource(), {
       readRepositoryFile: async () => {
         throw new AnalysisError("github_unavailable", "GitHub returned HTTP 403 for this file.");
@@ -354,7 +354,7 @@ describe("empty pull request metadata", () => {
     expect(report.remediationPrompt).toContain("Commits returned by GitHub: 0 commits");
   });
 
-  it.failing("lists free-form rules as pending when the model returns no findings", async () => {
+  it("lists free-form rules as pending when the model returns no findings", async () => {
     const emptyInterpreter: FreeformInterpreter = {
       async interpret() {
         return {
