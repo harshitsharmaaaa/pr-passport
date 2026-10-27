@@ -2,30 +2,63 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Report } from "@/lib/types";
-import { CopyIcon, DownloadIcon, CheckIcon } from "./icons";
+import { CheckIcon, CopyIcon, DownloadIcon } from "./icons";
+import { buttonClass, Toast } from "./ui";
+
+type Notice = { tone: "success" | "danger"; message: string };
+
+function describeScope(report: Report): string {
+  const failed = report.summary.fail;
+  const review = report.summary.needsReview;
+
+  if (failed === 0 && review === 0) {
+    if (report.findings.length === 0) {
+      return "No requirements were evaluated, so this brief records only the constraints and this report's limits. A human reviewer should assess the pull request first.";
+    }
+    return "No failed requirements were detected. The brief records the constraints, the passed checks not to regress, and this report's limits.";
+  }
+
+  const parts: string[] = [];
+  if (failed > 0) parts.push(`${failed} failed requirement${failed === 1 ? "" : "s"}`);
+  if (review > 0) parts.push(`${review} needs-review item${review === 1 ? "" : "s"}`);
+
+  return `Scoped to ${parts.join(" and ")}: the rule, the evidence, files to inspect, validation commands, and hard constraints.`;
+}
 
 export function RemediationPanel({ report }: { report: Report }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const timer = useRef<number | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const copiedTimer = useRef<number | null>(null);
+  const noticeTimer = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
-      if (timer.current !== null) window.clearTimeout(timer.current);
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+      if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
     };
   }, []);
 
   const filename = `pr-passport-${report.repository.fullName.replace("/", "-")}-${report.pullRequest.number}-remediation.md`;
+  const lineCount = report.remediationPrompt.split("\n").length;
+
+  function showNotice(next: Notice) {
+    setNotice(next);
+    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2400);
+  }
 
   async function copy() {
     setError(null);
     try {
       await navigator.clipboard.writeText(report.remediationPrompt);
       setCopied(true);
-      if (timer.current !== null) window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(() => setCopied(false), 2200);
+      showNotice({ tone: "success", message: "Repair brief copied to clipboard." });
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 2400);
     } catch {
-      setError("Clipboard access was blocked. Select the text below and copy it manually.");
+      setError("Clipboard access was blocked by the browser. Select the brief below and copy it manually.");
+      showNotice({ tone: "danger", message: "Copy failed — clipboard access was blocked." });
     }
   }
 
@@ -39,33 +72,34 @@ export function RemediationPanel({ report }: { report: Report }) {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
+    showNotice({ tone: "success", message: "Repair brief downloaded." });
   }
 
   return (
-    <section className="panel overflow-hidden" aria-labelledby="remediation-heading">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/5 px-6 py-5">
-        <div>
-          <h3 id="remediation-heading" className="text-sm font-semibold text-white">
-            Alan-ready remediation brief
-          </h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Failed requirements, evidence, files to inspect, validation commands, and hard constraints.
-          </p>
+    <section
+      id="repair-brief"
+      aria-labelledby="repair-brief-heading"
+      className="scroll-mt-20 overflow-hidden rounded-surface border border-line bg-surface"
+    >
+      <div className="flex flex-col gap-3 border-b border-line px-4 py-4 sm:px-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="repair-brief-heading" className="text-[15px] font-semibold text-ink">
+              Repair brief
+            </h2>
+            <span className="rounded-[4px] border border-line bg-surface-muted px-1.5 py-0.5 text-[11px] font-medium text-ink-secondary">
+              Alan-ready
+            </span>
+          </div>
+          <p className="mt-1 max-w-2xl text-[12.5px] leading-5 text-ink-secondary">{describeScope(report)}</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={copy}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700/70 bg-slate-900/70 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-500 hover:text-white"
-          >
-            {copied ? <CheckIcon className="h-3.5 w-3.5 text-emerald-300" /> : <CopyIcon className="h-3.5 w-3.5" />}
-            {copied ? "Copied" : "Copy"}
+
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button type="button" onClick={copy} className={buttonClass("primary", "sm")}>
+            {copied ? <CheckIcon className="h-3.5 w-3.5" /> : <CopyIcon className="h-3.5 w-3.5" />}
+            {copied ? "Copied" : "Copy brief"}
           </button>
-          <button
-            type="button"
-            onClick={download}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700/70 bg-slate-900/70 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-500 hover:text-white"
-          >
+          <button type="button" onClick={download} className={buttonClass("secondary", "sm")}>
             <DownloadIcon className="h-3.5 w-3.5" />
             Download .md
           </button>
@@ -73,21 +107,27 @@ export function RemediationPanel({ report }: { report: Report }) {
       </div>
 
       {error ? (
-        <p role="alert" className="border-b border-rose-400/20 bg-rose-500/10 px-6 py-2 text-xs text-rose-200">
+        <p role="alert" className="border-b border-danger/20 bg-danger-subtle px-4 py-2.5 text-[12.5px] text-danger sm:px-5">
           {error}
         </p>
       ) : null}
 
-      <pre className="scroll-thin max-h-[560px] overflow-auto whitespace-pre-wrap break-words px-6 py-5 font-mono text-[11.5px] leading-relaxed text-slate-300">
+      <div className="flex items-center justify-between gap-3 border-b border-line bg-surface-muted px-4 py-2 sm:px-5">
+        <span className="truncate font-mono text-[11px] text-ink-subtle">{filename}</span>
+        <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-subtle">
+          {lineCount} lines · markdown
+        </span>
+      </div>
+
+      <pre className="code-scroll max-h-[520px] overflow-auto whitespace-pre-wrap break-words bg-surface-muted px-4 py-4 font-mono text-[12px] leading-[1.7] text-ink-secondary sm:px-5">
         {report.remediationPrompt}
       </pre>
 
-      <div className="border-t border-white/5 px-6 py-3">
-        <p className="text-[11px] text-slate-500">
-          Generated from this report only. The brief contains no credentials and no instructions to merge, push, or
-          execute repository code.
-        </p>
-      </div>
+      <p className="border-t border-line px-4 py-3 text-[11.5px] leading-4 text-ink-subtle sm:px-5">
+        Generated from this report only. No credentials, and no instruction to merge, push, or execute repository code.
+      </p>
+
+      {notice ? <Toast tone={notice.tone}>{notice.message}</Toast> : null}
     </section>
   );
 }

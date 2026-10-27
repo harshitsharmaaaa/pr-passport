@@ -1,101 +1,159 @@
 @import "tailwindcss";
 
+/*
+ * PR Passport design tokens.
+ * Light, neutral, engineering-tool palette. Every color used in the UI should
+ * come from this scale so status meaning stays consistent across screens.
+ */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Code", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --color-canvas: #f7f8f6;
+  --color-surface: #ffffff;
+  --color-surface-muted: #fafbf9;
+  --color-ink: #191d1a;
+  --color-ink-secondary: #5c635e;
+  --color-ink-subtle: #6a716c;
+  --color-line: #e3e6e1;
+  --color-line-strong: #cdd2cb;
+  --color-hover: #f0f2ee;
+
+  --color-brand: #26734d;
+  --color-brand-strong: #1d5b3c;
+  --color-brand-subtle: #edf4ef;
+
+  --color-success: #237a4b;
+  --color-success-subtle: #edf5f0;
+  --color-warning: #946200;
+  --color-warning-subtle: #fbf3e3;
+  --color-danger: #b42318;
+  --color-danger-subtle: #fceeec;
+  --color-info: #4d6076;
+  --color-info-subtle: #eff2f6;
+
+  --radius-control: 6px;
+  --radius-surface: 10px;
 }
 
-:root {
-  color-scheme: dark;
-}
+@layer base {
+  :root {
+    color-scheme: light;
+  }
 
-html {
-  scroll-behavior: smooth;
-}
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
 
-body {
-  background-color: #05070d;
-  background-image:
-    radial-gradient(58rem 38rem at 12% -12%, rgba(45, 212, 191, 0.13), transparent 62%),
-    radial-gradient(52rem 34rem at 92% -4%, rgba(99, 102, 241, 0.16), transparent 58%),
-    linear-gradient(180deg, #05070d 0%, #070b14 45%, #05070d 100%);
-  background-attachment: fixed;
-  color: #e6edf7;
-}
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+  }
 
-::selection {
-  background: rgba(45, 212, 191, 0.3);
-  color: #f8fafc;
-}
+  ::selection {
+    background-color: #cfe3d8;
+    color: #10231a;
+  }
 
-.grid-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(to right, rgba(148, 163, 184, 0.09) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.09) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(ellipse at 50% 0%, black 20%, transparent 78%);
-  z-index: 0;
-}
+  :where(a, button, input, textarea, select, summary, [role="button"]):focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
 
-.panel {
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: linear-gradient(180deg, rgba(15, 21, 36, 0.82), rgba(9, 13, 24, 0.86));
-  backdrop-filter: blur(14px);
-  border-radius: 1.25rem;
-}
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
 
-.hairline {
-  border-color: rgba(148, 163, 184, 0.14);
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 .text-balance {
   text-wrap: balance;
 }
 
-.scroll-thin {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
-}
-
-.scroll-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.scroll-thin::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.28);
-  border-radius: 999px;
-}
-
-.stamp {
-  box-shadow:
-    inset 0 0 0 1px currentColor,
-    0 18px 45px -24px currentColor;
-}
-
 .rise {
-  animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise 0.24s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
+  }
+}
+
+.toast-in {
+  animation: toast-in 0.2s ease-out both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: #ecefeb;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    transform: translateX(100%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise {
+  .skeleton::after {
     animation: none;
+    background-image: none;
   }
-  html {
-    scroll-behavior: auto;
-  }
+}
+
+.code-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cdd2cb transparent;
+}
+
+.code-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.code-scroll::-webkit-scrollbar-thumb {
+  background-color: #d5dad3;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
 }

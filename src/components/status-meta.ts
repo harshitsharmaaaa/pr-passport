@@ -1,49 +1,52 @@
 import type { FindingStatus, Verdict } from "@/lib/types";
 
-export interface StatusStyle {
+export interface StatusTone {
+  /** Short status word shown next to a finding. */
   label: string;
-  stampLabel: string;
-  stampSubLabel?: string;
+  /** Label used by the findings filter. */
+  filterLabel: string;
   text: string;
-  border: string;
-  bg: string;
-  dot: string;
-  pill: string;
+  glyphBg: string;
 }
 
-export const STATUS_STYLES: Record<FindingStatus, StatusStyle> = {
+export const FINDING_STATUS: Record<FindingStatus, StatusTone> = {
   fail: {
     label: "Fail",
-    stampLabel: "Fail",
-    text: "text-rose-300",
-    border: "border-rose-400/30",
-    bg: "bg-rose-500/[0.06]",
-    dot: "bg-rose-400",
-    pill: "bg-rose-500/15 text-rose-200 border-rose-400/30",
+    filterLabel: "Failed",
+    text: "text-danger",
+    glyphBg: "bg-danger/10",
   },
   needs_review: {
-    label: "Needs human review",
-    stampLabel: "Needs human",
-    stampSubLabel: "review",
-    text: "text-amber-300",
-    border: "border-amber-400/30",
-    bg: "bg-amber-400/[0.06]",
-    dot: "bg-amber-300",
-    pill: "bg-amber-400/15 text-amber-200 border-amber-300/30",
+    label: "Needs review",
+    filterLabel: "Needs review",
+    text: "text-warning",
+    glyphBg: "bg-warning/10",
   },
   pass: {
     label: "Pass",
-    stampLabel: "Pass",
-    text: "text-emerald-300",
-    border: "border-emerald-400/30",
-    bg: "bg-emerald-400/[0.05]",
-    dot: "bg-emerald-400",
-    pill: "bg-emerald-400/15 text-emerald-200 border-emerald-300/30",
+    filterLabel: "Passed",
+    text: "text-success",
+    glyphBg: "bg-success/10",
   },
 };
 
-export const VERDICT_STYLES: Record<Verdict, StatusStyle> = {
-  fail: STATUS_STYLES.fail,
-  needs_review: STATUS_STYLES.needs_review,
-  pass: STATUS_STYLES.pass,
+export const VERDICT_STYLES: Record<Verdict, { label: string; text: string; bg: string; border: string }> = {
+  fail: {
+    label: "Blocked by failures",
+    text: "text-danger",
+    bg: "bg-danger-subtle",
+    border: "border-danger/20",
+  },
+  needs_review: {
+    label: "Needs human review",
+    text: "text-warning",
+    bg: "bg-warning-subtle",
+    border: "border-warning/20",
+  },
+  pass: {
+    label: "No blocking findings",
+    text: "text-success",
+    bg: "bg-success-subtle",
+    border: "border-success/20",
+  },
 };
