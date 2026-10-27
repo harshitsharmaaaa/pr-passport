@@ -4,6 +4,11 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # These three variables hold plain configuration values that also appear in
+  # documentation (.env.example, README.md, hint strings), so the secrets
+  # scanner false-positives on them. Whitelist exactly these keys; scanning
+  # stays active for the real credentials (GITHUB_TOKEN, INFERENCE_API_KEY).
+  SECRETS_SCAN_OMIT_KEYS = "INFERENCE_BASE_URL,INFERENCE_TIMEOUT_MS,INFERENCE_MAX_TOKENS"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
