@@ -26,28 +26,29 @@ function source(routes: GitHubMockRoutes) {
 
 describe("pull request field defaults", () => {
   it("maps a null description and absent counters without inventing values", async () => {
-    const { client } = source({
-      pullRequest: githubPullRequestPayload({
-        body: null,
-        user_login: null,
-        labels: undefined,
-        additions: undefined,
-        deletions: undefined,
-        changed_files: undefined,
-        commits: undefined,
-      }),
+    const payload = githubPullRequestPayload({
+      body: null,
+      user_login: null,
+      labels: undefined,
+    });
+    Object.assign(payload, {
+      additions: null,
+      deletions: null,
+      changed_files: null,
+      commits: null,
     });
 
+    const { client } = source({ pullRequest: payload });
     const pr = await client.getPullRequest(REF);
 
     expect(pr.body).toBe("");
     expect(pr.author).toBe("unknown");
     expect(pr.authorUrl).toBe("");
     expect(pr.labels).toEqual([]);
-    expect(pr.additions).toBe(40);
-    expect(pr.deletions).toBe(8);
-    expect(pr.changedFileCount).toBe(2);
-    expect(pr.commitCount).toBe(2);
+    expect(pr.additions).toBe(0);
+    expect(pr.deletions).toBe(0);
+    expect(pr.changedFileCount).toBe(0);
+    expect(pr.commitCount).toBe(0);
   });
 
   it("rejects a pull request without a usable head or base commit", async () => {

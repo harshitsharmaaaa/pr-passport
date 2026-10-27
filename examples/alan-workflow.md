@@ -186,7 +186,9 @@ forbidden from merging, pushing, or inventing rules.
 
 ## Two-minute demo procedure
 
-Rehearsed end to end; no GitHub or model credentials needed.
+Rehearsed end to end; no GitHub or model credentials needed. The detailed
+click-by-click runbook, including the fixture honesty table and troubleshooting,
+is [docs/DEMO.md](../docs/DEMO.md).
 
 1. `bun install && bun run dev` - open `http://localhost:3000`. *(~30 s)*
 2. Click the **Sample: failing PR** demo button. The FAIL report appears

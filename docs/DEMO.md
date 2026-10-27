@@ -1,8 +1,8 @@
 # PR Passport demo runbook
 
 A reproducible 1–3 minute walkthrough that shows what PR Passport does, using
-bundled fixtures only. It needs no GitHub token, no inference credentials, and
-no network access.
+bundled fixtures only. Once dependencies are installed, the demo needs no GitHub
+token, no inference credentials, and no network access.
 
 The demo answers one question: **can a pull request be checked against the
 repository's own contribution rules, with evidence, without inventing
@@ -19,16 +19,16 @@ deterministic and recorded findings, and the remediation brief handed to Alan.
 | GitHub API calls | None |
 | Model calls | None |
 
-Demo mode is disclosed in three places: the amber **Demo data** badge in the
+Demo mode is disclosed in four places: the amber **Demo data** badge in the
 report header, the banner above the report ("Repository, pull request and CI
 data come from bundled fixtures, not GitHub. Model findings are a recorded
-sample; no inference endpoint was called."), and the first entry under
-**Limitations**. The remediation brief also states `Report mode: demo (bundled
-fixtures)`.
+sample; no inference endpoint was called."), the first entry under
+**Limitations**, and the remediation brief (`Report mode: demo (bundled
+fixtures)`).
 
 ## Prerequisites
 
-- Bun 1.4+ and Node 20+ (or the Docker image).
+- Bun 1.4+ (the Docker image uses the same runtime).
 - No `.env.local` is needed. Do not set `DEMO_MODE` for this flow: the demo
   buttons pass the flag per request, which is what makes the demo badge appear.
 
@@ -60,10 +60,14 @@ What the audience sees:
 1. The URL field fills with `https://github.com/acme/widget-kit/pull/42`.
 2. A **demo mode** pill appears next to the fixture buttons.
 3. A status panel appears immediately: "Reading the pull request, guidelines,
-   and checks…" with a progress bar. It resolves in well under a second because
-   no network call is made.
+   and checks…" with a progress bar. It resolves as soon as the request
+   completes because no network call is made; on a cold `next dev` server the
+   first request can take a few seconds while Next compiles the route, which is
+   compilation, not analysis.
 
-Point out that this is the same status state a live analysis shows.
+Point out that this is the same status state a live analysis shows. If it
+flashes past, throttle the browser network in DevTools to see it; do not add an
+artificial delay to the app.
 
 ### 0:30 — Read the verdict and the demo disclosure (20s)
 
@@ -102,8 +106,8 @@ treated as a pass."
 
 If you want a second deterministic example, the **Required checks pass** card
 shows the CI rule with `unit tests (ubuntu-latest)` as failing evidence, and the
-**Tests for behaviour changes** card shows five changed source files with no
-test file among them.
+**Tests for behaviour changes** card cites five changed source files (from the
+15 changed files) with no test file among them.
 
 ### 1:20 — A separate human-review item (20s)
 
@@ -116,8 +120,8 @@ What the audience sees:
 - The requirement is conditional: "Add a changelog entry under `## Unreleased`
   in `CHANGELOG.md` for user-facing changes" / "Update the documentation in
   `docs/` when a public API changes."
-- The rationale explains that the condition could not be decided from the
-  available data.
+- The rationale says the guideline is conditional, so it was surfaced for human
+  review rather than treated as a hard failure.
 
 Say: "The code refuses to turn an ambiguous guideline into a hard failure. It
 says what a human has to decide, and the remediation brief repeats that as an
@@ -157,7 +161,8 @@ What the audience sees, in order:
    quoted excerpt, why it failed, evidence, suggested action, files to inspect.
 4. `## Needs human review` — the two conditional items, with "Do not guess and
    do not mark it resolved."
-5. `## Suggested files to inspect` — the changed files and `CONTRIBUTING.md`.
+5. `## Suggested files to inspect` — `CONTRIBUTING.md`, the PR template, and the
+   five cited source files.
 6. `## Validation commands` — `bun install`, `bun run lint`, `bun run test`,
    `bun run typecheck`, `bun run build`, each with the repository file it came
    from.
@@ -172,11 +177,15 @@ credentials, and forbids the agent from inventing rules or results."
 
 1. Click **Copy** (or **Download .md**).
 2. In Alan, create a task and paste the brief as the instructions.
-3. The task should start by fixing the DCO sign-off and the failing CI, and by
-   asking a maintainer about the changelog and docs items rather than guessing.
-4. After the fix, the task re-runs PR Passport against the same pull request and
-   reports the new verdict.
-5. Validation is the brief's own command list, run from the repository root:
+3. Read the brief's own constraint: if the agent cannot write to the
+   contributor's branch, it must prepare a patch and instructions instead of
+   pushing.
+4. Because `acme/widget-kit` is a fixture and does not exist, do **not** ask
+   Alan to push a fix to it. In this demo the handoff shows the task boundary:
+   the brief is bounded, sourced, and forbidden from inventing rules or
+   claiming an unrun check passed.
+5. Validation is the brief's own command list, run from the PR Passport
+   repository root:
 
 ```sh
 bun install
@@ -186,9 +195,15 @@ bun run typecheck
 bun run build
 ```
 
+6. Re-run the failing sample. It still returns **FAIL** with the same 3 / 7 / 2
+   counts. That is the honest result: the fixture is immutable, so the demo
+   proves the report is reproducible, not that the fictional pull request was
+   fixed.
+
 Point out that the validation commands were derived from `package.json` and the
-`CONTRIBUTING.md` code fence, not invented by the model. The brief does not ask
-the agent to merge or push, and PR Passport itself never writes to GitHub.
+`CONTRIBUTING.md` code fence, not invented by the model. In a live run the same
+brief goes to the contributor's real branch, and the re-run reflects the new
+commits. PR Passport itself never writes to GitHub.
 
 ### 3:00 — Optional control: the clean sample (20s)
 
