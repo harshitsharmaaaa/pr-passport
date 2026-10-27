@@ -23,11 +23,12 @@ It ends with an **Alan-ready remediation brief**: failed requirements, evidence,
 | Guardrail | How it is enforced |
 | --- | --- |
 | Public repositories only | URL parser accepts `github.com/<owner>/<repo>/pull/<n>` and nothing else; no OAuth anywhere |
-| Untrusted input | Repository files, PR text, and model output are treated as data; the model prompt wraps everything in `<untrusted_pull_request_data>` and ignores instructions inside |
+| Untrusted input | Repository files, PR text, and model output are treated as data; the prompt wraps the dossier in `<untrusted_pull_request_data>` and the extracted rules in `<untrusted_guideline_rules>`, and delimiter text inside that data is neutralised so it cannot escape the block |
 | Never execute repository code | The app only reads via the GitHub API; suggested commands are printed, never run |
 | Never merge or push | No write scopes are requested; the remediation brief explicitly forbids merging and pushing |
 | Never invent rules or results | Each project rule cites a repository file and line; missing CI, missing guidelines, and unreadable files are reported as limitations |
-| Strict model output | Model JSON must match a zod schema; unknown rule IDs, files, commits, or metadata are discarded; evidence-free claims become NEEDS HUMAN REVIEW |
+| Strict model output | Model JSON must match a zod schema; unknown rule IDs, files, commits, CI checks, or metadata are discarded; evidence-free, low-confidence, conditional, or unusable claims become NEEDS HUMAN REVIEW |
+| No silent model failure | Timeouts, HTTP errors, non-JSON bodies, refusals, provider filtering, truncated output, schema violations after one repair, and partial answers all discard the interpretation; the free-form rules then appear as *not evaluated*, and pending rules keep the verdict out of PASS |
 
 ## How it works
 
@@ -129,8 +130,9 @@ validation commands.
 | `INFERENCE_BASE_URL` | no | OpenAI-compatible API root; without it, free-form rules are listed as *not evaluated* |
 | `INFERENCE_API_KEY` | no | bearer token for the endpoint |
 | `INFERENCE_MODEL` | no | model id, e.g. `qwen/qwen3-32b` |
-| `INFERENCE_TIMEOUT_MS` | no | request timeout (default 45000) |
-| `INFERENCE_JSON_MODE` | no | `off` if the endpoint rejects `response_format` |
+| `INFERENCE_TIMEOUT_MS` | no | request timeout (default 45000, clamped to 5000-120000) |
+| `INFERENCE_JSON_MODE` | no | `off` if the endpoint rejects `response_format`; PR Passport also retries plain prompting automatically when an endpoint returns 400/422/501 |
+| `INFERENCE_MAX_TOKENS` | no | output ceiling (default 2000, clamped to 256-4096); raise it if a large rule set is truncated |
 | `DEMO_MODE` | no | `on` forces bundled fixtures for every request |
 
 The app is fully functional without inference: deterministic checks run, and free-form rules appear under "Not evaluated" with the reason.
@@ -156,7 +158,7 @@ bun run verify      # all of the above
 bun run build       # production build
 ```
 
-Test coverage includes URL validation (host spoofing, credentials, ports), guideline extraction, every deterministic check, model-output grounding (unknown files/commits/rules, downgrade behaviour, schema strictness), report assembly, remediation-brief content, validation-command derivation, rate limiting, fixture consistency, an offline demo run with no network or credentials, and drift between a fresh demo run and `examples/sample-report.json`.
+Test coverage includes URL validation (host spoofing, credentials, ports), guideline extraction, every deterministic check, model-output grounding (unknown files/commits/rules/CI checks, prompt injection, refusals, truncation, timeouts, non-JSON responses, empty and partial answers, downgrade behaviour, schema strictness), report assembly, remediation-brief content, validation-command derivation, rate limiting, fixture consistency, an offline demo run with no network or credentials, and drift between a fresh demo run and `examples/sample-report.json`.
 
 ## Deployment
 
@@ -170,6 +172,8 @@ Rate limiting is per-instance and in-memory (8 analyses/minute/IP). Put a platfo
 - Only public repositories; private repos return "not found".
 - Guidelines are read as Markdown; reStructuredText or wiki-only guidelines are not fetched.
 - The model sees metadata, file paths, commit summaries, the PR description, and bounded diff excerpts (up to 8 files, 1,600 characters each) - never the full diff, and patch content is delivered as untrusted data, not instructions. Its job is policy interpretation, not code review.
+- Model requests are bounded end to end: the dossier is trimmed (patches, then files, then commits, then description) until it fits a hard prompt budget, and oversized responses are rejected rather than parsed.
+- Reliability depends on the endpoint supporting `response_format` and following JSON instructions. Without JSON mode, one malformed or incomplete answer is repaired once before the interpretation is discarded.
 - GitHub mergeability can lag; when it is not computed yet the report says so.
 - Monorepos with guidelines outside the checked paths will show "no guidelines found" — the report states this rather than guessing rules.
 
